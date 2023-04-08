@@ -301,30 +301,6 @@ def np_stable_invert_c2w(c2w):
     return w2c
 
 
-def navi2opengl(transform: np.ndarray) -> np.ndarray:
-    """Convert transform matrix from blender to opengl coordinate system.
-    
-        Navi coordinate system is assumed to be: x-right, y-down, z-front
-        and opengl to be x-right, y-up, z-forward.    
-    """
-    # Switch y and z axis and negate z coordinate.
-    gl_to_navi = np.array(
-        [
-            [1, 0, 0, 0],
-            [0, -1, 0, 0],
-            [0, 0, 1, 0],
-            [0, 0, 0, 1],
-        ]
-    )
-    # Build a transform that converts to the blender coordinate system, 
-    # applies the original transform and then converts back to opengl.
-    # return np.transpose(gl_to_blender) @ transform @ gl_to_blender
-    if len(transform.shape) == 3:
-        return gl_to_navi[np.newaxis] @ transform
-    else:
-        return  gl_to_navi @ transform
-
-
 class NaviDataset:
     """Dataset for Navi dataset hosted inside google.
     """
