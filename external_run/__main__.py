@@ -20,7 +20,13 @@ import sys
 
 def run_method(basefolder, method, method_args):
     method_args_str = " ".join(method_args)
-    command = f"PYTHONPATH={basefolder}/external/{method} conda run -n {method} python -m external_run.{method}.run_script {method_args_str}"
+    # Starting from conda 4.4 it has become a shell function and needs to be initialized like described here
+    # https://unix.stackexchange.com/questions/65751/how-to-get-functions-propagated-to-subshell
+    if os.path.isfile("/opt/conda/etc/profile.d/conda.sh"):
+        conda_init = "source /opt/conda/etc/profile.d/conda.sh &&"
+    else:
+        conda_init = ""
+    command = f"{conda_init} PYTHONPATH={basefolder}/external/{method} conda run -n {method} python -m external_run.{method}.run_script {method_args_str}"
     full_command = 'bash -c "' + command + '"'
     print(full_command)
     subprocess.run(full_command, stderr=sys.stderr, stdout=sys.stdout, shell=True)

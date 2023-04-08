@@ -24,6 +24,7 @@ from utils.training_setup_utils import get_num_replicas
 
 from dataflow.samurai.load_nerd_blender_dataset import NerdDataset
 from dataflow.samurai.load_samurai_dataset import SamuraiDataset
+from dataflow.samurai.navi_dataset import NaviDataset
 
 
 class InputTargets(tf.experimental.ExtensionType):
@@ -152,6 +153,18 @@ def create_dataflow(args):
         )
     elif args.dataset == "nerd":
         dataset = NerdDataset(args.datadir, args.load_gt_poses)
+    elif args.dataset == "navi":
+        # Assuming datadir points to the version/scene_name/ directory.
+        dataset = NaviDataset(
+            os.path.basename(args.datadir.rstrip("/")),
+            os.path.dirname(os.path.dirname(args.datadir.rstrip("/"))),
+            args.max_resolution_dimension,
+            version="v0.3",
+            load_gt_poses=args.load_gt_poses,
+            automatic_scale=True,
+            noise_on_gt_poses=args.noise_on_gt_poses,
+            preload=False,
+        )
 
     image_shapes = dataset.get_image_shapes(args.max_resolution_dimension)
 

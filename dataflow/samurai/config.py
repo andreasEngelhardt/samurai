@@ -32,7 +32,14 @@ def add_args(parser):
         "--test_holdout", type=int, default=16, help="Test holdout stride"
     )
 
-    parser.add_argument("--dataset", choices=["samurai", "nerd"], default="samurai")
+    parser.add_argument(
+        "--noise_on_gt_poses",
+        type=float,
+        default=0.0,
+        help="Add random noise to pose initialization with gt data.."
+    )
+
+    parser.add_argument("--dataset", choices=["samurai", "nerd", "navi"], default="samurai")
     parser.add_argument("--load_gt_poses", action="store_true")
     parser.add_argument("--canonical_pose", type=int, default=0)
 
