@@ -397,7 +397,7 @@ class NaviDataset:
             scene_dir = os.path.join(self.navi_release_root, object_id, scene_name)
             # Check if quadrants file exists.
             if os.path.isfile(os.path.join(scene_dir, "quadrants.json")):
-                with open(os.path.join(data_dir, "quadrants.json"), "r") as fp:
+                with open(os.path.join(scene_dir, "quadrants.json"), "r") as fp:
                     self.quadrant_info = json.load(fp)
                 self.directions = np.stack(
                     [
