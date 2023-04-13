@@ -193,6 +193,18 @@ def create_dataflow(args):
             val_df,
             test_df,
         )
+    elif args.load_gt_poses:
+        return (
+            image_shapes,
+            dataset.get_poses(),
+            dataset.get_focal(args.max_resolution_dimension),
+            dataset.get_directions(),
+            image_request_function,
+            train_df,
+            val_df,
+            test_df,
+            i_train_all
+        )
     else:
         return (
             image_shapes,
