@@ -169,7 +169,13 @@ def create_dataflow(args):
     image_shapes = dataset.get_image_shapes(args.max_resolution_dimension)
 
     # TODO make overwriteable by dataset type
-    i_test = np.arange(len(image_shapes))[:: args.test_holdout]
+    if args.use_test_img_id_file:
+        id_file_path = os.path.join(args.datadir, "test_img_id.txt")
+        with open(id_file_path, "r") as id_file:
+            ids_string = id_file.read()
+        i_test = np.asarray([int(id) for id in ids_string.split(" ")])
+    else:
+        i_test = np.arange(len(image_shapes))[:: args.test_holdout]
     i_val = i_test
     i_train = np.array([i for i in np.arange(len(image_shapes)) if (i not in i_test)])
 
@@ -203,7 +209,6 @@ def create_dataflow(args):
             train_df,
             val_df,
             test_df,
-            i_train_all
         )
     else:
         return (

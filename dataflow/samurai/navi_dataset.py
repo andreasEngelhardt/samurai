@@ -345,9 +345,14 @@ class NaviDataset:
 
         ext = os.path.splitext(image_paths[0])[1]
         self.filepaths = [os.path.join(image_dir, f"{n}{ext}") for n in img_names]
+        mask_exts = [".png", ".jpg", ".exr"]
+        mask_ext = ext
+        for e in mask_exts:
+            if os.path.isfile(os.path.join(self.navi_release_root, object_id, scene_name, "mask", f"{img_names[0]}{e}")):
+                mask_ext = e
         self.mask_paths = [
             os.path.join(
-                self.navi_release_root, object_id, scene_name, "mask", f"{n}{ext}"
+                self.navi_release_root, object_id, scene_name, "mask", f"{n}{mask_ext}"
             ) for n in img_names
         ]
         if not os.path.isfile(self.mask_paths[0]) and not skip_masks:
