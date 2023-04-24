@@ -152,6 +152,41 @@ class CameraStore(tf.keras.layers.Layer):
         if init_c2w is not None:
             r, t = init_c2w[..., :3, :3], init_c2w[..., :3, 3]
             self.distance = tf.reduce_mean(magnitude(t))
+
+            # If we use camera multiplex add a bit of noise
+            if num_cameras_per_image > 1:
+                # Enforce shape.
+                t = tf.reshape(t, (num_images, 1, 3))
+                r = tf.reshape(r, (num_images, 1, 3, 3))
+                t = repeat(t, num_cameras_per_image, 1)
+                r = repeat(r, num_cameras_per_image, 1)
+                t_noise = tf.random.normal(
+                    (num_images, num_cameras_per_image, 3), stddev=self.distance / 6
+                )  # Add random noise
+                # Only n-1 should have random noise applied. The first index is
+                # not perturbed
+                t_noise = tf.concat(
+                    [tf.zeros_like(t_noise[:, :1, :]) + 1e-4, t_noise[:, 1:, :]], 1
+                )
+                
+                t = normalize((t_noise + t)) * magnitude(t)
+
+                random_up = tf.random.normal(t[..., :1].shape, mean=0.0, stddev=np.pi / 3)
+                random_up = tf.concat(
+                    (tf.zeros_like(random_up[:, :1, :]), random_up[:, 1:, :]), 1
+                )
+                random_up = tf.reshape(random_up, (-1, 1))
+                t = tf.reshape(t, (-1, 3))
+
+                r = tf.concat(
+                    [
+                        r[:, :1],
+                        tf.reshape(build_look_at_matrix(t, tf.zeros_like(t), up_rotation=random_up), [num_images, -1, 3, 3])[:, 1:]
+                    ],
+                    axis=1
+                )
+                r = tf.reshape(r, (-1, 3, 3))
+    
         elif init_directions is not None:
             t = init_directions * distance
             t = tf.expand_dims(t, 1)
