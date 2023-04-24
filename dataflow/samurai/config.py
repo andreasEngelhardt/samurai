@@ -39,6 +39,12 @@ def add_args(parser):
         help="Add random noise to pose initialization with gt data.."
     )
 
+    parser.add_argument(
+        "--use_test_img_id_file",
+        action="store_true",
+        help="Read a sidecar file named test_img_id.txt to determine image ids for testing. This is used for neroic data, for example."
+    )
+
     parser.add_argument("--dataset", choices=["samurai", "nerd", "navi"], default="samurai")
     parser.add_argument("--load_gt_poses", action="store_true")
     parser.add_argument("--canonical_pose", type=int, default=0)

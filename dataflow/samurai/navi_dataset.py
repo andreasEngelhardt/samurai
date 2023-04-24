@@ -396,6 +396,11 @@ class NaviDataset:
             )
 
             self.poses[:, :3, -2:-1] += noise_t
+     
+            noise_r = np.random.normal(
+                size=(self.poses.shape[0], 3, 3), scale=(np.pi * 0.5) * (noise_on_gt_poses / 5)
+            )
+            self.poses[:, :3, :3] += noise_r
 
         if not load_gt_poses:
             # Convert poses to quadrant directions
