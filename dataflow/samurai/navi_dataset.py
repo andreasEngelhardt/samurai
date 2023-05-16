@@ -127,6 +127,39 @@ def apply_colors_to_depth_map(depth, minn=None, maxx=None):
 #   return coords
 
 
+def get_rotation3d(value: float, axis="x") -> np.ndarray:
+    # random rotation matrix.
+    rot = np.asarray(
+        [
+            [
+                np.cos(value) if axis in ["x", "y"] else 1.0,
+                -np.sin(value) if axis == "x" else 0,
+                np.sin(value) if axis == "y" else 0
+            ],
+            [
+                np.sin(value) if axis == "x" else 0.0,
+                np.cos(value) if axis in ["x", "z"] else 1,
+                -np.sin(value) if axis == "z" else 0
+            ],
+            [
+                -np.sin(value) if axis == "y" else 0.0,
+                np.sin(value) if axis == "z" else 0,
+                np.cos(value) if axis in ["y", "z"] else 1
+            ],
+        ],
+        np.float32
+    )
+    return rot
+    
+ 
+def get_random_rotation3d(scale: float = np.pi * 0.5) -> np.ndarray:
+    random_values = np.random.normal(size=(3), scale=scale)
+    rot = (get_rotation3d(random_values[0], "x")
+           @ get_rotation3d(random_values[1], "y")
+           @ get_rotation3d(random_values[2], "z"))
+    return rot
+
+
 def np_translate(translation):
     # Create a 4x4 matrix based on translation vector (3,).
     translation = np.asarray(translation).astype(np.float32)
@@ -195,9 +228,6 @@ def load_json_annotation(file_path) -> dict:
     return annotations
 
 
-def magnitude(x):
-    return np.sqrt(x.dot(x))
-
 
 def c2w_to_quadrants(poses: np.ndarray):
     quadrants_list = []
@@ -209,12 +239,18 @@ def c2w_to_quadrants(poses: np.ndarray):
         # Assume that the origin has the correct axis layout: x - right, y - top, z-front.
         # Calculate the distance to all quadrants
         magnitudes = np.stack(
-            [magnitude(p - origin_norm) for p, _ in directions], 0
+            [magnitude(p - origin_norm)[0] for p, _ in directions], 0
         )
+        # print("magnitudes", magnitudes)
+        # print("sorted magnitudes", np.argsort(magnitudes[:, 0]))
+        # print("sorted magnitudes", np.argsort(magnitudes[:, 0]).shape)
+
         # Select the minimum distance
-        sorted_idx = np.argsort(magnitudes)[0]
+        sorted_idx = np.argsort(magnitudes)[0] # [:, 0] # [0]
+        
 
         # Get the corresponding quadrant definitions
+        # print("directions", directions)
         _, dirs = directions[sorted_idx]
         dirs = [str(d) for d in dirs]
         quadrants_list.append(dirs)
@@ -285,6 +321,7 @@ def generate_masks(src_paths: List[str], dest_paths: List[str]) -> None:
         if not os.path.isfile(dp):
             print("WARN: Sanity check failed. Could not find", dp)
 
+
 def np_stable_invert_c2w(c2w):
     r = c2w[..., :3, :3]
     t = c2w[..., :3, 3]
@@ -301,6 +338,73 @@ def np_stable_invert_c2w(c2w):
     return w2c
 
 
+def magnitude(x: np.ndarray) -> np.ndarray:
+    return np.sqrt(np.sum(np.square(x), axis=-1, keepdims=True))
+
+
+def normalize(x: np.ndarray) -> np.ndarray:
+    magn = magnitude(x)
+        # If the magnitude is too low just return a zero vector
+    return x / magn
+
+
+def c2w_to_lookat(c2w):
+    batch_shape = np.shape(c2w)[0]
+    dir_shape = np.zeros((batch_shape, 1), dtype=np.float32)
+    dirs = np.concatenate(
+        [  # TODO enable optimizing cx/cy?
+            np.zeros_like(dir_shape),
+            np.zeros_like(dir_shape),
+            -np.ones_like(dir_shape),
+        ],
+        -1,
+    )  # B, 3
+    rays_d = np.sum(dirs[..., None, :] * c2w[..., :3, :3], -1)  # B, 3
+    rays_o = np.broadcast_to(c2w[..., :3, -1], rays_d.shape)  # B, 3
+
+    ray_to_center_magn = magnitude(rays_o)  # B, 1
+    center = rays_o + normalize(rays_d) * ray_to_center_magn
+
+    return rays_o, center
+
+
+def build_look_at_matrix(eye_pos, center, up_rotation=0):
+    w2c_direction = normalize(eye_pos - center)
+
+    value = np.ones_like(eye_pos[..., :1]) * up_rotation
+
+    # The regular up vector. Here, rotation 0 means default up -> Rotate around z axis
+    up_regular = np.concatenate(
+        (
+            np.sin(value / 2),
+            np.cos(value / 2),
+            np.zeros_like(value),
+        ),
+        -1,
+    )
+    # The camera is at the north pole of the coordinate system. We now rotate around y axis
+    up_north = np.concatenate([np.zeros_like(value), np.sin(value), -np.cos(value)], -1)
+    # The camera is at the north pole of the coordinate system.
+    up_south = np.concatenate([np.zeros_like(value), np.sin(value), np.cos(value)], -1)
+
+    # Calculate which pole up location we should use
+    reg_w2c_dot = np.sum(w2c_direction * up_regular, axis=-1, keepdims=True)
+    up = np.where(
+        reg_w2c_dot >= 0.95,
+        up_north,
+        np.where(reg_w2c_dot <= -0.95, up_south, up_regular),
+    )
+    # assert up.shape == up_regular.shape
+
+    camera_right = normalize(np.cross(up, w2c_direction))
+    camera_up = normalize(np.cross(w2c_direction, camera_right))
+
+    R = np.stack([camera_right, camera_up, w2c_direction],-2)
+    # Todo: Inversion by transposition and negation?
+    # tf.linalg.inv(R)
+    return np.transpose(R, [0, 2, 1])
+
+
 class NaviDataset:
     """Dataset for Navi dataset hosted inside google.
     """
@@ -315,7 +419,8 @@ class NaviDataset:
                  noise_on_gt_poses: float = 0.0,
                  skip_masks: bool = False,
                  automatic_scale: bool = False,
-                 dirs_ext_to_read: Optional[List[Tuple[str, str]]] = None):
+                 dirs_ext_to_read: Optional[List[Tuple[str, str]]] = None,
+                 noise_keep_lookat: bool = False):
         super().__init__()
         
         self.navi_release_root = os.path.join(data_root, version)
@@ -334,14 +439,21 @@ class NaviDataset:
                 self.navi_release_root, object_id, scene_name, 'images'
         )
         image_paths = []
+        i_test = []
         for i_anno, anno in enumerate(annotations):
             image_path = os.path.join(
             image_dir, anno['filename'])
             image_paths.append(image_path)
+            curr_split = anno.get('split')
+            if curr_split is not None and curr_split != "train":
+                i_test.append(int(os.path.splitext(anno['filename'])[0]))
+            
         img_names = sorted(
             [os.path.splitext(os.path.basename(f))[0] for f in image_paths],
             key=lambda x: int(os.path.splitext(os.path.basename(x))[0]),
         )
+        self.i_test = np.asarray(sorted(i_test))
+        print("Loaded test ids from json:", self.i_test)
 
         ext = os.path.splitext(image_paths[0])[1]
         self.filepaths = [os.path.join(image_dir, f"{n}{ext}") for n in img_names]
@@ -389,18 +501,25 @@ class NaviDataset:
         self.directions = self.poses[:, :, 2]
         self.focal = np.asarray(focal).astype(np.float32)
 
+
         if noise_on_gt_poses> 0:
             distance = np.mean(np.linalg.norm(self.poses[:, :, -1], axis=-1))
             noise_t = np.random.normal(
                 size=(self.poses.shape[0], 3, 1), scale=(distance / 5) * noise_on_gt_poses
             )
 
-            self.poses[:, :3, -2:-1] += noise_t
-     
-            noise_r = np.random.normal(
-                size=(self.poses.shape[0], 3, 3), scale=(np.pi * 0.5) * (noise_on_gt_poses / 5)
-            )
-            self.poses[:, :3, :3] += noise_r
+            if noise_keep_lookat:
+                origins, centers = c2w_to_lookat(self.poses)
+                noisy_origins = origins + noise_t[..., 0]
+                noisy_r = build_look_at_matrix(origins, centers)
+                self.poses[:, :3, :3] = noisy_r
+                self.poses[:, :3, -1] = noisy_origins
+            else:
+                # self.poses[:, :3, -2:-1] += noise_t
+                self.poses[:, :3, -1:] += noise_t
+        
+                noise_r = get_random_rotation3d(scale=0.3 * np.pi)
+                self.poses[:, :3, :3] = noise_r @ self.poses[:, :3, :3]
 
         if not load_gt_poses:
             # Convert poses to quadrant directions
@@ -417,7 +536,17 @@ class NaviDataset:
                     0,
                 ).astype(np.float32)
             else:
-                directions = c2w_to_quadrants(
+                directions = directions = c2w_to_quadrants(
+                    self.poses
+                )
+                self.directions = np.stack(
+                    [
+                        combine_direction(*[Direction(e) for e in d])
+                        for d in directions
+                    ],
+                    0,
+                ).astype(np.float32)
+                self.save_quadrants(os.path.join(scene_dir, "quadrants.json"), directions)(
                     self.poses
                 )
                 self.directions = np.stack(
@@ -453,9 +582,11 @@ class NaviDataset:
         else:
             self.images = None
 
-
     def __len__(self):
         return len(self.filepaths)
+
+    def get_test_idxs(self):
+        return self.i_test
 
     def save_quadrants(self, filepath, directions):
         

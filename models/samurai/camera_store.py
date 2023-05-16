@@ -608,6 +608,45 @@ class CameraStore(tf.keras.layers.Layer):
             )
             return tf.reshape(best_index, ())  # And flatten it to a scalar
 
+    @tf.function()
+    def get_closest_cameras(self, idx, k: int = 2):
+        with tf.name_scope("ClosestKCameraFinding"):
+            current_parameter, _, _ = self(idx, 1)
+            current_c2w = current_parameter.c2w
+            # Gets all poses as long as there is only 1 camera per view.
+            all_pose_c2w = self.get_all_best_c2w()
+
+            current_origin = tf.reshape(current_c2w[..., :3, -1], (1, 3))
+            all_origin = tf.reshape(all_pose_c2w[..., :3, -1], (-1, 3))
+
+            similarity = tf.reshape(
+                dot(
+                    normalize(current_origin),
+                    normalize(all_origin),
+                )
+                + 1,
+                (-1,),
+            )  # 2 is best, 0 worst
+
+            # Filter out samples we do not want
+            indices = tf.range(similarity.shape[0], dtype=tf.int32)
+            
+            same_idx_mask = tf.cast(indices, tf.int32) != tf.cast(
+                tf.reshape(idx, []), tf.int32
+            )
+            
+            filtered_indices = tf.boolean_mask(indices, same_idx_mask)
+            filtered_values = tf.boolean_mask(similarity, same_idx_mask)
+            
+            top_indices = tf.argsort(filtered_values)
+            
+            best_indices = tf.gather(
+                filtered_indices,
+                tf.reshape(top_indices[-k:], (-1, 1))
+            )
+            return best_indices
+        
+    
     def get_closest_best_camera(self, idx, get_mean_loss):
         with tf.name_scope("ClosestCameraFinding"):
             current_parameter, _, _ = self(idx, 1)

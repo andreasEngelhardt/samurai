@@ -159,11 +159,12 @@ def create_dataflow(args):
             os.path.basename(args.datadir.rstrip("/")),
             os.path.dirname(os.path.dirname(args.datadir.rstrip("/"))),
             args.max_resolution_dimension,
-            version="v0.3",
+            version=args.navi_version,
             load_gt_poses=args.load_gt_poses,
             automatic_scale=True,
             noise_on_gt_poses=args.noise_on_gt_poses,
             preload=False,
+            noise_keep_lookat=args.noise_keep_lookat
         )
 
     image_shapes = dataset.get_image_shapes(args.max_resolution_dimension)
@@ -175,7 +176,10 @@ def create_dataflow(args):
             ids_string = id_file.read()
         i_test = np.asarray([int(id) for id in ids_string.split(" ")])
     else:
-        i_test = np.arange(len(image_shapes))[:: args.test_holdout]
+        if args.dataset == "navi":
+            i_test = dataset.get_test_idxs()
+        else:
+            i_test = np.arange(len(image_shapes))[:: args.test_holdout]
     i_val = i_test
     i_train = np.array([i for i in np.arange(len(image_shapes)) if (i not in i_test)])
 

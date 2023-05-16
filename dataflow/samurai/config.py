@@ -44,6 +44,17 @@ def add_args(parser):
         action="store_true",
         help="Read a sidecar file named test_img_id.txt to determine image ids for testing. This is used for neroic data, for example."
     )
+    parser.add_argument(
+        "--noise_keep_lookat",
+        action="store_true",
+        help="Keep the lookat directions when applying noise to gt."
+    )
+    parser.add_argument(
+        "navi_version",
+        type=str,
+        default="v0.3",
+        help="Version number of navi dataset."
+    )
 
     parser.add_argument("--dataset", choices=["samurai", "nerd", "navi"], default="samurai")
     parser.add_argument("--load_gt_poses", action="store_true")
