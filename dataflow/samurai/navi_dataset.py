@@ -420,7 +420,8 @@ class NaviDataset:
                  skip_masks: bool = False,
                  automatic_scale: bool = False,
                  dirs_ext_to_read: Optional[List[Tuple[str, str]]] = None,
-                 noise_keep_lookat: bool = False):
+                 noise_keep_lookat: bool = False,
+                 sparsity: int = 0):
         super().__init__()
         
         self.navi_release_root = os.path.join(data_root, version)
@@ -454,6 +455,26 @@ class NaviDataset:
         )
         self.i_test = np.asarray(sorted(i_test))
         print("Loaded test ids from json:", self.i_test)
+
+        selected_frames = []
+        if sparsity != 0:
+            sparse_image_dir = f"{image_dir}_sparse_{sparsity}"
+            if os.path.isdir(sparse_image_dir):
+                with open(os.path.join(sparse_image_dir, "selected_frames.json")) as f:
+                    selected_frames = json.load(f)["selected_indices"]
+                selected_frames = sorted(selected_frames)
+                # selected_frames = [i if i not in i_test.tolist() for selected_frames]
+                image_paths = np.asarray(image_paths)[selected_frames].tolist()
+                img_names = np.asarray(img_names)[selected_frames].tolist()
+                assert np.all([i in selected_frames for i in i_test])
+
+                # Overwrite test indices with new indices in sparse array.
+                selected_frames = np.sort(selected_frames)
+                self.i_test = np.searchsorted(selected_frames, self.i_test)
+                self.selected_frames = selected_frames
+
+            else:
+                raise ValueError("Sparsity level not available.")
 
         ext = os.path.splitext(image_paths[0])[1]
         self.filepaths = [os.path.join(image_dir, f"{n}{ext}") for n in img_names]
@@ -492,6 +513,12 @@ class NaviDataset:
             focal.append(focal_length_pixel)
 
         self.poses = np.array(poses).astype(np.float32)
+        self.focal = np.asarray(focal).astype(np.float32)
+
+        if len(selected_frames) > 0 and sparsity != 0:
+            self.poses = self.poses[selected_frames]
+            self.focal = self.focal[selected_frames]
+
         if automatic_scale:
             # Determine scene scale based on heuristic.
             scene_radius = np.mean(np.linalg.norm(self.poses[..., :3, 3], axis=-1))
@@ -499,7 +526,6 @@ class NaviDataset:
         self.poses[..., :3, 3] *= scale
         
         self.directions = self.poses[:, :, 2]
-        self.focal = np.asarray(focal).astype(np.float32)
 
 
         if noise_on_gt_poses> 0:
@@ -535,8 +561,10 @@ class NaviDataset:
                     ],
                     0,
                 ).astype(np.float32)
+                if len(selected_frames) > 0 and sparsity != 0:
+                    self.directions = self.directions[selected_frames]
             else:
-                directions = directions = c2w_to_quadrants(
+                directions = c2w_to_quadrants(
                     self.poses
                 )
                 self.directions = np.stack(
@@ -556,16 +584,20 @@ class NaviDataset:
                     ],
                     0,
                 ).astype(np.float32)
-                self.save_quadrants(os.path.join(scene_dir, "quadrants.json"), directions)
+                if sparsity == 0:
+                    self.save_quadrants(os.path.join(scene_dir, "quadrants.json"), directions)
             self.poses = None
 
         if dirs_ext_to_read is not None:
             all_dirs = [os.path.join(data_dir, d[0]) for d in dirs_ext_to_read]
             self.channels = [d[2] for d in dirs_ext_to_read]
         else:
+            image_dir_name = "images" if sparsity == 0 else f"images_sparse_{sparsity}"
+            mask_dir_name = "mask" if sparsity == 0 else f"mask_sparse_{sparsity}"
+            
             all_dirs = [
-                os.path.join(self.navi_release_root, object_id, scene_name, "images"),
-                os.path.join(self.navi_release_root, object_id, scene_name, "mask")
+                os.path.join(self.navi_release_root, object_id, scene_name, image_dir_name),
+                os.path.join(self.navi_release_root, object_id, scene_name, mask_dir_name)
             ]
             # Set channels for image and masks, respectively.
             self.channels = [3, 1]
@@ -687,6 +719,11 @@ class NaviDataset:
             imgs.append(types)
 
         return (idxs, *imgs)
+
+    def update_sparse_indices(self, idxs):
+        # Overwrite test indices with new indices in sparse array.
+        selected_frames = np.sort(self.selected_frames)
+        return np.searchsorted(selected_frames, idxs)
 
     def get_image_path_from_indices(self, idxs, allow_oob=False):
         if isinstance(idxs, (list, np.ndarray)):

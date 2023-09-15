@@ -164,7 +164,8 @@ def create_dataflow(args):
             automatic_scale=True,
             noise_on_gt_poses=args.noise_on_gt_poses,
             preload=False,
-            noise_keep_lookat=args.noise_keep_lookat
+            noise_keep_lookat=args.noise_keep_lookat,
+            sparsity=args.sparsity
         )
 
     image_shapes = dataset.get_image_shapes(args.max_resolution_dimension)
@@ -175,6 +176,8 @@ def create_dataflow(args):
         with open(id_file_path, "r") as id_file:
             ids_string = id_file.read()
         i_test = np.asarray([int(id) for id in ids_string.split(" ")])
+        if args.sparsity > 0:
+           i_test = dataset.update_sparse_indices(i_test) 
     else:
         if args.dataset == "navi":
             i_test = dataset.get_test_idxs()
