@@ -33,6 +33,13 @@ def add_args(parser):
     )
 
     parser.add_argument(
+        "--sparsity", type=int, default=0,
+        choices=[0, 8, 16, 24],
+        help=("Number of views to use from the sparse datasets. 0 disables sparsity. "
+              "The data variants need to be precomputed at this point.")
+    )
+
+    parser.add_argument(
         "--noise_on_gt_poses",
         type=float,
         default=0.0,
