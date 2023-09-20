@@ -14,8 +14,9 @@
 
 
 import tensorflow as tf
-
+from typing import Tuple
 import nn_utils.math_utils as math_utils
+import numpy as np
 
 
 def stable_invert_c2i(c2i):
@@ -176,6 +177,29 @@ def c2w_to_lookat(c2w):
     return rays_o, center
 
 
+def c2w_to_lookat_up(c2w: tf.Tensor) -> Tuple[tf.Tensor, tf.Tensor, tf.Tensor]:
+    """Convert c2w matrix to eye, center and up parameters.
+
+    Args:
+        c2w (tf.Tensor): _description_
+
+    Returns:
+        Tuple: eye, center and up parameters matching input c2w as close as possible.
+    """
+    # This is a little hacky but so far the most reliable way.
+    eye, center = c2w_to_lookat(c2w)
+
+    r_flat = build_look_at_matrix(eye, center, up_rotation=0)
+    c2w_flat = r_t_to_c2w(r_flat, eye)
+
+    angles_target = euler_from_rotation_matrix(c2w[..., :3, :3])
+    angles_default_up = euler_from_rotation_matrix(c2w_flat[..., :3, :3])
+    # Get difference of angles around z axis.
+    up = (angles_default_up - angles_target)[..., 2] * 2
+    
+    return eye, center, up
+
+
 def r_t_to_c2w(r, t):
     tf.debugging.assert_shapes(
         [
@@ -188,3 +212,78 @@ def r_t_to_c2w(r, t):
     c2w = math_utils.convert3x4_4x4(c2w)
 
     return c2w
+
+
+def euler_from_rotation_matrix(rotation_matrix: tf.Tensor,
+                         name: str = "euler_from_rotation_matrix") -> tf.Tensor:
+    """Converts rotation matrices to Euler angles.
+
+    Adapted from Tensorflow Graphics: https://github.com/tensorflow/graphics/blob/master/tensorflow_graphics/geometry/transformation/euler.py#L140-L213
+
+    The rotation matrices are assumed to have been constructed by rotation around
+    the $$x$$, then $$y$$, and finally the $$z$$ axis.
+
+    Note:
+    There is an infinite number of solutions to this problem. There are
+    Gimbal locks when abs(rotation_matrix(2,0)) == 1, which are not handled.
+
+    Note:
+    In the following, A1 to An are optional batch dimensions.
+
+    Args:
+        rotation_matrix: A tensor of shape `[A1, ..., An, 3, 3]`, where the last two
+        dimensions represent a rotation matrix.
+        name: A name for this op that defaults to "euler_from_rotation_matrix".
+
+    Returns:
+        A tensor of shape `[A1, ..., An, 3]`, where the last dimension represents
+        the three Euler angles.
+
+    """
+
+    def general_case(rotation_matrix, r20, eps_addition):
+        """Handles the general case."""
+        theta_y = -tf.asin(r20)
+        sign_cos_theta_y = math_utils.nonzero_sign(tf.cos(theta_y))
+        r00 = rotation_matrix[..., 0, 0]
+        r10 = rotation_matrix[..., 1, 0]
+        r21 = rotation_matrix[..., 2, 1]
+        r22 = rotation_matrix[..., 2, 2]
+        r00 = math_utils.nonzero_sign(r00) * eps_addition + r00
+        r22 = math_utils.nonzero_sign(r22) * eps_addition + r22
+        # cos_theta_y evaluates to 0 on Gimbal locks, in which case the output of
+        # this function will not be used.
+        theta_z = tf.atan2(r10 * sign_cos_theta_y, r00 * sign_cos_theta_y)
+        theta_x = tf.atan2(r21 * sign_cos_theta_y, r22 * sign_cos_theta_y)
+        angles = tf.stack((theta_x, theta_y, theta_z), axis=-1)
+        return angles
+
+    def gimbal_lock(rotation_matrix, r20, eps_addition):
+        """Handles Gimbal locks."""
+        r01 = rotation_matrix[..., 0, 1]
+        r02 = rotation_matrix[..., 0, 2]
+        sign_r20 = math_utils.nonzero_sign(r20)
+        r02 = math_utils.nonzero_sign(r02) * eps_addition + r02
+        theta_x = tf.atan2(-sign_r20 * r01, -sign_r20 * r02)
+        theta_y = -sign_r20 * tf.constant(np.pi / 2.0, dtype=r20.dtype)
+        theta_z = tf.zeros_like(theta_x)
+        angles = tf.stack((theta_x, theta_y, theta_z), axis=-1)
+        return angles
+
+    with tf.name_scope(name):
+        rotation_matrix = tf.convert_to_tensor(value=rotation_matrix)
+
+        tf.debugging.assert_shapes(
+            [
+                (rotation_matrix, (..., 3, 3)),
+            ]
+        )
+
+        r20 = rotation_matrix[..., 2, 0]
+        eps_addition = math_utils.select_eps_for_addition(rotation_matrix.dtype)
+        general_solution = general_case(rotation_matrix, r20, eps_addition)
+        gimbal_solution = gimbal_lock(rotation_matrix, r20, eps_addition)
+        is_gimbal = tf.equal(tf.abs(r20), 1)
+        gimbal_mask = tf.stack((is_gimbal, is_gimbal, is_gimbal), axis=-1)
+        return tf.where(gimbal_mask, gimbal_solution, general_solution)
+

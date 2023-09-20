@@ -19,7 +19,7 @@ from typing import Tuple
 import tensorflow as tf
 import numpy as np
 from nn_utils.math_utils import magnitude, repeat, normalize, dot, l2Norm
-from nn_utils.camera.camera_utils import build_look_at_matrix, c2w_to_lookat, r_t_to_c2w
+from nn_utils.camera.camera_utils import build_look_at_matrix, c2w_to_lookat, c2w_to_lookat_up, r_t_to_c2w
 from nn_utils.camera.rotation_sixd import (
     build_4x4_matrix,
     matrix_to_rotation_6d,
@@ -218,10 +218,18 @@ class CameraStore(tf.keras.layers.Layer):
 
         if self.use_look_at_representation:
             c2w = r_t_to_c2w(r, t)
-            eye_pos, center = c2w_to_lookat(c2w)
 
+            if init_c2w is not None:
+                # We should also adress the up direction.
+                eye_pos, center, up_init = c2w_to_lookat_up(c2w)
+
+            else:
+                eye_pos, center = c2w_to_lookat(c2w)
+                up_init = tf.zeros_like(eye_pos[..., :1])
+            
             eye_pos = tf.reshape(eye_pos, (num_images, num_cameras_per_image, 3))
             center = tf.reshape(center, (num_images, num_cameras_per_image, 3))
+            up_init = tf.reshape(up_init, (num_images, num_cameras_per_image, 1))
 
             if offset_learning:
                 learn_initial_eye = False
@@ -248,7 +256,7 @@ class CameraStore(tf.keras.layers.Layer):
             )
 
             self.up_rotation_initial = tf.Variable(
-                initial_value=tf.zeros_like(eye_pos[..., :1]),
+                initial_value=up_init,
                 name="camera_up_rotation_initial",
                 dtype=tf.float32,
                 trainable=learn_initial_center,

@@ -34,7 +34,7 @@ def add_args(parser):
 
     parser.add_argument(
         "--sparsity", type=int, default=0,
-        choices=[0, 8, 16, 24],
+        choices=[0, 4, 6, 8, 16, 24],
         help=("Number of views to use from the sparse datasets. 0 disables sparsity. "
               "The data variants need to be precomputed at this point.")
     )
@@ -65,6 +65,7 @@ def add_args(parser):
 
     parser.add_argument("--dataset", choices=["samurai", "nerd", "navi"], default="samurai")
     parser.add_argument("--load_gt_poses", action="store_true")
+    parser.add_argument("--load_gt_focals", action="store_true")
     parser.add_argument("--canonical_pose", type=int, default=0)
 
     return parser

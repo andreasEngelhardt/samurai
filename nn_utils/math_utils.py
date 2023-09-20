@@ -70,6 +70,20 @@ def convert3x4_4x4(mat):
     return output
 
 
+def nonzero_sign(
+    x: tf.Tensor,
+    name: str = 'nonzero_sign') -> tf.Tensor:
+    """Returns the sign of x with sign(0) defined as 1 instead of 0.
+       Based on Tensorflow Graphics safe ops.
+    """
+    with tf.name_scope(name):
+        x = tf.convert_to_tensor(value=x)
+
+        one = tf.ones_like(x)
+        return tf.where(tf.greater_equal(x, 0.0), one, -one)
+
+
+
 def pinv(a, rcond=1e-15):
     s, u, v = tf.linalg.svd(a)
     # Ignore singular values close to zero to prevent numerical overflow
