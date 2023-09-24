@@ -544,7 +544,7 @@ class NaviDataset:
                 # self.poses[:, :3, -2:-1] += noise_t
                 self.poses[:, :3, -1:] += noise_t
         
-                noise_r = get_random_rotation3d(scale=0.3 * np.pi)
+                noise_r = np.stack([get_random_rotation3d(scale=0.3 * np.pi) for _ in range(len(self.poses))])
                 self.poses[:, :3, :3] = noise_r @ self.poses[:, :3, :3]
 
         if not load_gt_poses:
