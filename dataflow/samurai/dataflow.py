@@ -167,15 +167,40 @@ def create_dataflow(args):
             noise_keep_lookat=args.noise_keep_lookat,
             sparsity=args.sparsity
         )
+    elif args.dataset == "orb":
+        subdirs = [("images", ".png", 3)]
+        
+        mask_dir = "masks"
+        # if os.path.exists(os.path.join(args.datadir, "fba_mattes")):
+        #     mask_dir = "fba_mattes"
+        subdirs.append((mask_dir, ".png", 1))
+
+        dataset = SamuraiDataset(
+            args.datadir, subdirs,
+            load_gt_poses=args.load_gt_poses,
+            scale=args.coordinate_scale,
+            gt_poses_format=args.gt_poses_format,
+            # noise_on_gt_poses=args.noise_on_gt_poses
+        )
 
     image_shapes = dataset.get_image_shapes(args.max_resolution_dimension)
 
     # TODO make overwriteable by dataset type
     if args.use_test_img_id_file:
         id_file_path = os.path.join(args.datadir, "test_img_id.txt")
+        split_delim = " "
+        if not os.path.isfile(id_file_path):
+            # Try a different format that is used by orb.
+            id_file_path = os.path.join(args.datadir, "test_id.txt")
+            split_delim = "\n"
+        
         with open(id_file_path, "r") as id_file:
             ids_string = id_file.read()
-        i_test = np.asarray([int(id) for id in ids_string.split(" ")])
+            i_test = np.asarray([int(id.rstrip(".png")) for id in ids_string.split(split_delim)])
+        if args.dataset == "orb":
+            # Convert to proper indices.
+            i_test = dataset.file_ids_to_indices(i_test)
+            print("Converted file ids to indices.", i_test)
         if args.sparsity > 0:
            i_test = dataset.update_sparse_indices(i_test) 
     else:

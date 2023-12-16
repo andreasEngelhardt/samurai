@@ -69,6 +69,7 @@ class CameraStore(tf.keras.layers.Layer):
         use_look_at_representation: bool = False,
         offset_learning: bool = True,
         use_initializations: bool = True,
+        fix_canonical_view: bool = False,
         **kwargs
     ):
         super(CameraStore, self).__init__(**kwargs)
@@ -78,6 +79,7 @@ class CameraStore(tf.keras.layers.Layer):
 
         # Image 0 always fixes the optimization
         self.canonical_pose_idx = canonical_pose_idx
+        self.fix_canonical_view = fix_canonical_view
 
         # Calculate the distance required so the targets fits in view
         self.distance = (object_height / 2) / (math.tan(math.radians(angular_fov) / 2))

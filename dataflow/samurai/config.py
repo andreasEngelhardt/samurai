@@ -62,10 +62,21 @@ def add_args(parser):
         default="v0.3",
         help="Version number of navi dataset."
     )
+    parser.add_argument(
+        "--coordinate_scale",
+        type=float,
+        default=1.0,
+        help="Scaling factor on camera poses coordinates."
+    )
 
-    parser.add_argument("--dataset", choices=["samurai", "nerd", "navi"], default="samurai")
+    parser.add_argument("--dataset", choices=["samurai", "nerd", "navi", "orb"], default="samurai")
     parser.add_argument("--load_gt_poses", action="store_true")
     parser.add_argument("--load_gt_focals", action="store_true")
     parser.add_argument("--canonical_pose", type=int, default=0)
+    parser.add_argument(
+        "--gt_poses_format",
+        choices=["blender", "colmap", "colmap_neroic", "colmap_orb"],
+        default="blender"
+    )
 
     return parser
